@@ -1,1 +1,439 @@
-# Ocean-Cleanup-Slice
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ocean Cleanup: Slice</title>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --deep:#07222E; --mid:#0E4C57; --teal:#1B8A93;
+    --foam:#9FEAD9; --sand:#F2E3B3; --coral:#F0654A; --ink:#EAF7F5; --hp:#4CD97B;
+  }
+  *{box-sizing:border-box;}
+  html,body{ margin:0; padding:0; height:100%; background:var(--deep);
+    font-family:'Nunito',sans-serif; color:var(--ink); overflow:hidden;
+    padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); }
+  #wrap{ position:relative; width:100vw; height:100vh; background:var(--deep); }
+  canvas{ display:block; width:100%; height:100%; touch-action:none; }
+  .hud{ position:absolute; top:calc(14px + env(safe-area-inset-top,0px)); left:14px; right:14px;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    font-family:'Baloo 2',cursive; pointer-events:none; }
+  .pill{ background:rgba(7,34,46,0.55); border:1px solid rgba(159,234,217,0.35);
+    border-radius:14px; padding:8px 14px; font-size:18px; font-weight:700; backdrop-filter:blur(4px); }
+  .hpwrap{ width:150px; }
+  .hpbar-outer{ width:150px; height:16px; border-radius:10px; background:rgba(0,0,0,0.35);
+    border:1px solid rgba(159,234,217,0.35); overflow:hidden; margin-top:4px; }
+  .hpbar-inner{ height:100%; background:var(--hp); width:100%; transition:width .2s ease, background .2s ease; }
+  .hplabel{ font-size:13px; color:var(--foam); }
+  .combo{ position:absolute; top:78px; left:50%; transform:translateX(-50%);
+    font-family:'Baloo 2',cursive; font-size:22px; color:var(--sand);
+    text-shadow:0 2px 0 rgba(0,0,0,0.3); pointer-events:none; opacity:0; transition:opacity .15s; }
+  .boss-warn{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    font-family:'Baloo 2',cursive; font-size:clamp(22px,6vw,34px); color:var(--coral);
+    text-shadow:0 2px 0 rgba(0,0,0,0.4); pointer-events:none; opacity:0; transition:opacity .2s; }
+  .flash{ position:absolute; inset:0; background:rgba(240,101,74,0.35); opacity:0; pointer-events:none; transition:opacity .35s ease; }
+  .overlay{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background: rgba(4,20,27,0.72); text-align:center; padding:24px; }
+  .card{ max-width:440px; width:100%; }
+  h1{ font-family:'Baloo 2',cursive; font-size:clamp(30px,7vw,46px); margin:0 0 6px;
+    color:var(--foam); text-shadow:0 2px 0 rgba(0,0,0,0.25); }
+  .sub{ color:var(--sand); font-size:16px; margin:0 0 20px; line-height:1.5; }
+  .fact{ font-size:14px; color:var(--ink); background:rgba(27,138,147,0.25);
+    border-left:3px solid var(--foam); padding:10px 14px; border-radius:8px;
+    margin:16px 0; text-align:left; line-height:1.5; }
+  button{ font-family:'Baloo 2',cursive; font-size:20px; font-weight:700;
+    background:var(--coral); color:#fff; border:none; border-radius:999px;
+    padding:14px 34px; cursor:pointer; box-shadow:0 6px 0 #B93F2A; transition:transform .08s ease; }
+  button:active{ transform:translateY(4px); box-shadow:0 2px 0 #B93F2A; }
+  button:focus-visible{ outline:3px solid var(--foam); outline-offset:3px; }
+  .stat-row{ display:flex; justify-content:center; gap:22px; margin:14px 0 18px; }
+  .stat{ font-family:'Baloo 2',cursive; }
+  .stat b{ display:block; font-size:26px; color:var(--foam); }
+  .stat span{ font-size:12px; color:var(--sand); }
+  .hidden{ display:none !important; }
+  .controls-note{ font-size:12px; color:var(--sand); margin-top:14px; opacity:.8; }
+  .legend{ display:flex; gap:14px; justify-content:center; font-size:12px; color:var(--sand); margin-top:10px; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+  <div class="flash" id="flash"></div>
+
+  <div class="hud">
+    <div class="pill">🗑️ <span id="score">0</span></div>
+    <div class="hpwrap">
+      <div class="pill" style="width:100%;"><span class="hplabel">❤️ HP <span id="hpText">100</span>%</span>
+        <div class="hpbar-outer"><div class="hpbar-inner" id="hpBar"></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="combo" id="comboText"></div>
+  <div class="boss-warn" id="bossWarn">🦈 SHARK INCOMING!</div>
+
+  <div class="overlay" id="startScreen">
+    <div class="card">
+      <h1>Ocean Cleanup: Slice</h1>
+      <p class="sub">Trash floats up from the seabed — swipe across it to slice it clean. A jellyfish sting costs 25% health, and a shark bite takes half your health bar. Slice hearts to heal.</p>
+      <button id="startBtn">Start Slicing</button>
+      <p class="controls-note">Swipe / drag across items to slice</p>
+      <div class="legend">
+        <span>🐟 Trash: +score</span>
+        <span>🎐 Jellyfish: -25% HP</span>
+        <span>🦈 Shark: -50% HP</span>
+        <span>❤️ Heart: +10% HP</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="endScreen">
+    <div class="card">
+      <h1 id="endTitle">Run Over</h1>
+      <div class="stat-row">
+        <div class="stat"><b id="finalScore">0</b><span>SLICED</span></div>
+        <div class="stat"><b id="bestScore">0</b><span>BEST</span></div>
+      </div>
+      <div class="fact" id="ecoFact"></div>
+      <button id="retryBtn">Slice Again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const hpBar = document.getElementById('hpBar');
+  const hpText = document.getElementById('hpText');
+  const comboText = document.getElementById('comboText');
+  const bossWarn = document.getElementById('bossWarn');
+  const flashEl = document.getElementById('flash');
+  const startScreen = document.getElementById('startScreen');
+  const endScreen = document.getElementById('endScreen');
+  const startBtn = document.getElementById('startBtn');
+  const retryBtn = document.getElementById('retryBtn');
+  const endTitle = document.getElementById('endTitle');
+  const finalScore = document.getElementById('finalScore');
+  const bestScoreEl = document.getElementById('bestScore');
+  const ecoFact = document.getElementById('ecoFact');
+
+  const facts = [
+    "Over 8 million tonnes of plastic enter the ocean every year.",
+    "Sea turtles often mistake floating plastic bags for jellyfish.",
+    "Plastic bottles can take up to 450 years to break down in the sea.",
+    "Microplastics have been found in nearly every corner of the ocean.",
+    "Reusing a bag just a few times cuts its footprint dramatically.",
+    "Fishing gear makes up a large share of ocean plastic pollution."
+  ];
+
+  let best = 0;
+  try { best = Number(localStorage.getItem('oc_best') || 0); } catch(e){}
+
+  function resize(){
+    canvas.width = canvas.clientWidth * devicePixelRatio;
+    canvas.height = canvas.clientHeight * devicePixelRatio;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+  let W = () => canvas.width, H = () => canvas.height;
+
+  const trashTypes = ['bottle','can','bag'];
+  let items = [], particles = [], trail = [], rays = [];
+  let score = 0, health = 100, running = false, rafId = null;
+  let spawnTimer = 0, lastTime = 0, comboCount = 0, comboTimer = 0;
+  let bossTimer = 0, bossActive = false, sceneTime = 0;
+
+  function setHealth(v){
+    health = Math.max(0, Math.min(100, v));
+    hpBar.style.width = health + '%';
+    hpText.textContent = Math.round(health);
+    hpBar.style.background = health > 55 ? '#4CD97B' : (health > 25 ? '#F2C14E' : '#F0654A');
+    if(health <= 0) endGame('health');
+  }
+
+  function reset(){
+    items = []; particles = []; trail = []; rays = [];
+    score = 0; comboCount = 0; comboTimer = 0; bossTimer = 4000; sceneTime = 0;
+    scoreEl.textContent = score;
+    setHealth(100);
+    comboText.style.opacity = 0;
+    bossWarn.style.opacity = 0;
+    const dpr = devicePixelRatio;
+    for(let i=0;i<5;i++){
+      rays.push({ x: Math.random()*W(), w:(60+Math.random()*90)*dpr, drift:(Math.random()-0.5)*0.02*dpr, a: 0.05+Math.random()*0.05 });
+    }
+  }
+
+  function spawnItem(forceBoss){
+    const dpr = devicePixelRatio;
+    let type;
+    const roll = Math.random();
+    if(forceBoss){ type = 'shark'; }
+    else if(roll < 0.05) type = 'heart';
+    else if(roll < 0.20) type = 'jelly';
+    else type = trashTypes[Math.floor(Math.random()*trashTypes.length)];
+
+    const x = W()*0.15 + Math.random()*W()*0.7;
+    const vy = -(H()*0.014 + Math.random()*H()*0.0035);
+    const vx = (Math.random()-0.5) * W()*0.005;
+    let r = 40*dpr;
+    if(type==='jelly') r = 26*dpr;
+    if(type==='shark') r = 70*dpr;
+    if(type==='heart') r = 32*dpr;
+
+    items.push({
+      x, y: H()+50*dpr, vx, vy: type==='shark' ? vy*0.7 : vy,
+      gravity: H()*0.000020,
+      rot: Math.random()*Math.PI*2,
+      spin: (Math.random()-0.5)*0.04,
+      type, sliced:false, r
+    });
+  }
+
+  function drawTrash(it){
+    const dpr = devicePixelRatio;
+    ctx.save();
+    ctx.translate(it.x, it.y);
+    ctx.rotate(it.rot);
+    if(it.type==='bottle'){
+      ctx.fillStyle = 'rgba(180,220,230,0.9)';
+      ctx.fillRect(-9*dpr,-24*dpr,18*dpr,42*dpr);
+      ctx.fillRect(-4.5*dpr,-33*dpr,9*dpr,10*dpr);
+    } else if(it.type==='can'){
+      ctx.fillStyle = '#C0C7CC';
+      ctx.fillRect(-12*dpr,-20*dpr,24*dpr,40*dpr);
+      ctx.fillStyle = '#E8543A';
+      ctx.fillRect(-12*dpr,-3*dpr,24*dpr,10*dpr);
+    } else if(it.type==='bag'){
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.beginPath();
+      ctx.moveTo(-20*dpr,-18*dpr);
+      ctx.quadraticCurveTo(0,-36*dpr,20*dpr,-18*dpr);
+      ctx.quadraticCurveTo(26*dpr,12*dpr,0,26*dpr);
+      ctx.quadraticCurveTo(-26*dpr,12*dpr,-20*dpr,-18*dpr);
+      ctx.fill();
+    } else if(it.type==='jelly'){
+      ctx.fillStyle = 'rgba(240,101,74,0.6)';
+      ctx.beginPath();
+      ctx.arc(0,0, it.r*0.75, Math.PI, 0);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(240,101,74,0.75)';
+      ctx.lineWidth = 2.5*dpr;
+      for(let i=-2;i<=2;i++){
+        ctx.beginPath();
+        ctx.moveTo(i*it.r*0.28, 0);
+        ctx.lineTo(i*it.r*0.24, it.r*1.0);
+        ctx.stroke();
+      }
+    } else if(it.type==='heart'){
+      ctx.fillStyle = '#F0654A';
+      ctx.beginPath();
+      const s = it.r*0.9;
+      ctx.moveTo(0, s*0.3);
+      ctx.bezierCurveTo(0,-s*0.3, -s,-s*0.3, -s, s*0.1);
+      ctx.bezierCurveTo(-s, s*0.5, 0, s*0.8, 0, s*1.1);
+      ctx.bezierCurveTo(0, s*0.8, s, s*0.5, s, s*0.1);
+      ctx.bezierCurveTo(s,-s*0.3, 0,-s*0.3, 0, s*0.3);
+      ctx.fill();
+    } else if(it.type==='shark'){
+      ctx.fillStyle = '#4A6B75';
+      ctx.beginPath();
+      ctx.ellipse(0,0, it.r, it.r*0.5, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(it.r*0.6,-it.r*0.1);
+      ctx.lineTo(it.r*1.15,-it.r*0.55);
+      ctx.lineTo(it.r*0.75, it.r*0.05);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(0,-it.r*0.45); ctx.lineTo(it.r*0.15,-it.r*0.95); ctx.lineTo(it.r*0.35,-it.r*0.4);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#EAF7F5';
+      ctx.beginPath();
+      ctx.arc(-it.r*0.75, -it.r*0.05, it.r*0.06, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function spawnParticles(x,y,color,dpr,count){
+    for(let i=0;i<(count||10);i++){
+      const a = Math.random()*Math.PI*2, sp = (1+Math.random()*3)*dpr;
+      particles.push({x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp, life:1, color});
+    }
+  }
+
+  function pointNearSegment(px,py, x1,y1,x2,y2){
+    const dx=x2-x1, dy=y2-y1;
+    const len2 = dx*dx+dy*dy || 1;
+    let t = ((px-x1)*dx + (py-y1)*dy)/len2;
+    t = Math.max(0, Math.min(1, t));
+    const cx = x1+t*dx, cy = y1+t*dy;
+    return Math.hypot(px-cx, py-cy);
+  }
+
+  function flash(){
+    flashEl.style.opacity = 1;
+    setTimeout(()=>{ flashEl.style.opacity = 0; }, 220);
+  }
+
+  function endGame(reason){
+    running = false;
+    cancelAnimationFrame(rafId);
+    if(score > best){ best = score; try{ localStorage.setItem('oc_best', best);}catch(e){} }
+    endTitle.textContent = reason === 'health' ? "Overwhelmed!" : "Run Over";
+    finalScore.textContent = score;
+    bestScoreEl.textContent = best;
+    ecoFact.textContent = "🌊 " + facts[Math.floor(Math.random()*facts.length)];
+    endScreen.classList.remove('hidden');
+  }
+
+  function drawBackground(t, dpr){
+    ctx.clearRect(0,0,W(),H());
+    const grad = ctx.createLinearGradient(0,0,0,H());
+    grad.addColorStop(0,'#125866'); grad.addColorStop(0.5,'#0B3D45'); grad.addColorStop(1,'#031319');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,W(),H());
+
+    ctx.save();
+    rays.forEach(r=>{
+      r.x += r.drift;
+      if(r.x < -100*dpr) r.x = W()+100*dpr;
+      if(r.x > W()+100*dpr) r.x = -100*dpr;
+      const sway = Math.sin(t*0.0003 + r.x)*30*dpr;
+      const rg = ctx.createLinearGradient(r.x, -20*dpr, r.x+sway, H());
+      rg.addColorStop(0, `rgba(255,250,220,${r.a})`);
+      rg.addColorStop(1, 'rgba(255,250,220,0)');
+      ctx.fillStyle = rg;
+      ctx.beginPath();
+      ctx.moveTo(r.x - r.w/2, -20*dpr);
+      ctx.lineTo(r.x + r.w/2, -20*dpr);
+      ctx.lineTo(r.x + r.w/2 + sway*1.5, H());
+      ctx.lineTo(r.x - r.w/2 + sway*1.5, H());
+      ctx.closePath();
+      ctx.fill();
+    });
+    ctx.restore();
+  }
+
+  function loop(t){
+    if(!running) return;
+    if(!lastTime) lastTime = t;
+    const dt = Math.min(40, t-lastTime); lastTime = t;
+    const dpr = devicePixelRatio;
+    sceneTime += dt;
+
+    spawnTimer += dt;
+    const interval = Math.max(480, 900 - score*7);
+    if(spawnTimer > interval){ spawnTimer = 0; spawnItem(false); }
+
+    bossTimer -= dt;
+    if(bossTimer <= 0 && !bossActive){
+      bossActive = true;
+      bossWarn.style.opacity = 1;
+      setTimeout(()=>{ bossWarn.style.opacity = 0; spawnItem(true); bossActive = false; }, 900);
+      bossTimer = 9000 + Math.random()*4000;
+    }
+
+    if(comboTimer > 0){ comboTimer -= dt; if(comboTimer<=0){ comboCount=0; comboText.style.opacity=0; } }
+
+    drawBackground(sceneTime, dpr);
+
+    items.forEach(it=>{
+      it.vy += it.gravity*dt;
+      it.x += it.vx*(dt/16); it.y += it.vy*(dt/16);
+      it.rot += it.spin*(dt/16);
+      if(!it.sliced) drawTrash(it);
+    });
+
+    if(trail.length>1){
+      for(let i=1;i<trail.length;i++){
+        const p1=trail[i-1], p2=trail[i];
+        items.forEach(it=>{
+          if(it.sliced) return;
+          const d = pointNearSegment(it.x,it.y,p1.x,p1.y,p2.x,p2.y);
+          if(d < it.r){
+            it.sliced = true;
+            if(it.type==='shark'){
+              spawnParticles(it.x,it.y,'74,107,117',dpr,18);
+              setHealth(health - 50);
+              flash();
+            } else if(it.type==='jelly'){
+              spawnParticles(it.x,it.y,'240,101,74',dpr,12);
+              setHealth(health - 25);
+            } else if(it.type==='heart'){
+              spawnParticles(it.x,it.y,'240,101,74',dpr,10);
+              setHealth(health + 10);
+            } else {
+              score += 1; scoreEl.textContent = score;
+              comboCount += 1; comboTimer = 700;
+              if(comboCount>=2){
+                comboText.textContent = comboCount + 'x combo!';
+                comboText.style.opacity = 1;
+              }
+              spawnParticles(it.x,it.y,'240,230,180',dpr,10);
+            }
+          }
+        });
+      }
+    }
+
+    items = items.filter(it=>{
+      if(it.sliced) return false;
+      return it.y > -100*dpr && it.y < H()+120*dpr;
+    });
+
+    particles.forEach(p=>{
+      p.x += p.vx; p.y += p.vy; p.vy += 0.1*dpr; p.life -= 0.03;
+      ctx.fillStyle = `rgba(${p.color},${Math.max(0,p.life)})`;
+      ctx.beginPath(); ctx.arc(p.x,p.y,3*dpr,0,Math.PI*2); ctx.fill();
+    });
+    particles = particles.filter(p=>p.life>0);
+
+    if(trail.length>1){
+      ctx.strokeStyle = 'rgba(159,234,217,0.85)';
+      ctx.lineWidth = 4*dpr;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(trail[0].x, trail[0].y);
+      for(let i=1;i<trail.length;i++) ctx.lineTo(trail[i].x, trail[i].y);
+      ctx.stroke();
+    }
+    trail = trail.filter(p=>{ p.age = (p.age||0)+dt; return p.age < 120; });
+
+    if(running) rafId = requestAnimationFrame(loop);
+  }
+
+  function addTrailPoint(x,y){
+    trail.push({x,y,age:0});
+    if(trail.length > 14) trail.shift();
+  }
+
+  let pointerDown = false;
+  function getPos(e){
+    const rect = canvas.getBoundingClientRect();
+    const dpr = devicePixelRatio;
+    const cx = (e.clientX!==undefined? e.clientX : (e.touches && e.touches[0].clientX));
+    const cy = (e.clientY!==undefined? e.clientY : (e.touches && e.touches[0].clientY));
+    return { x:(cx-rect.left)*dpr, y:(cy-rect.top)*dpr };
+  }
+  canvas.addEventListener('pointerdown', e=>{ pointerDown=true; const p=getPos(e); addTrailPoint(p.x,p.y); });
+  canvas.addEventListener('pointermove', e=>{ if(!pointerDown||!running) return; const p=getPos(e); addTrailPoint(p.x,p.y); });
+  canvas.addEventListener('pointerup', ()=>{ pointerDown=false; });
+  canvas.addEventListener('pointerleave', ()=>{ pointerDown=false; });
+
+  function startGame(){
+    resize(); reset();
+    startScreen.classList.add('hidden');
+    endScreen.classList.add('hidden');
+    running = true; lastTime = 0; spawnTimer = 0;
+    rafId = requestAnimationFrame(loop);
+  }
+  startBtn.addEventListener('click', startGame);
+  retryBtn.addEventListener('click', startGame);
+})();
+</script>
+</body>
+</html>
