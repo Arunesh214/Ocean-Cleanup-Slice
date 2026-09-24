@@ -15,7 +15,7 @@
     font-family:'Nunito',sans-serif; color:var(--ink); overflow:hidden;
     padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); }
   #wrap{ position:relative; width:100vw; height:100vh; background:var(--deep); }
-  canvas{ display:block; width:100%; height:100%; touch-action:none; }
+  canvas{ display:block; width:100%; height:100%; touch-action:none; cursor:none; }
   .hud{ position:absolute; top:calc(14px + env(safe-area-inset-top,0px)); left:14px; right:14px;
     display:flex; justify-content:space-between; align-items:flex-start;
     font-family:'Baloo 2',cursive; pointer-events:none; }
@@ -131,16 +131,69 @@
   let best = 0;
   try { best = Number(localStorage.getItem('oc_best') || 0); } catch(e){}
 
+  let items = [], particles = [], trail = [], rays = [];
+  const pointer = { x: null, y: null, active:false };
+  const hook = { pivotX:0, angle:0, angularVel:0, length:120, x:0, y:0 };
+
   function resize(){
     canvas.width = canvas.clientWidth * devicePixelRatio;
     canvas.height = canvas.clientHeight * devicePixelRatio;
+    hook.pivotX = canvas.width/2;
   }
   window.addEventListener('resize', resize);
   resize();
   let W = () => canvas.width, H = () => canvas.height;
 
   const trashTypes = ['bottle','can','bag'];
-  let items = [], particles = [], trail = [], rays = [];
+
+  function updateHook(dt){
+    if(pointer.x === null) return;
+    const dpr = devicePixelRatio;
+    const maxAngle = 1.15;
+    const maxReach = W()*0.42;
+    const offset = Math.max(-maxReach, Math.min(maxReach, pointer.x - hook.pivotX));
+    const targetAngle = (offset / maxReach) * maxAngle;
+    const targetLength = Math.max(70*dpr, pointer.y);
+
+    const stiffness = 0.0011, damping = 0.052;
+    const accel = stiffness*(targetAngle - hook.angle) - damping*hook.angularVel;
+    hook.angularVel += accel*dt;
+    hook.angularVel *= 0.985;
+    hook.angle += hook.angularVel*dt;
+
+    hook.length += (targetLength - hook.length) * Math.min(1, dt*0.006);
+
+    hook.x = hook.pivotX + Math.sin(hook.angle) * hook.length;
+    hook.y = Math.cos(hook.angle) * hook.length;
+  }
+
+  function drawHook(dpr){
+    if(pointer.x === null) return;
+    const hx = hook.x, hy = hook.y;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(230,230,220,0.85)';
+    ctx.lineWidth = 2*dpr;
+    ctx.beginPath();
+    ctx.moveTo(hook.pivotX, 0);
+    ctx.lineTo(hx, hy - 14*dpr);
+    ctx.stroke();
+
+    ctx.translate(hx, hy);
+    ctx.rotate(hook.angle*0.4);
+    ctx.strokeStyle = pointer.active ? '#F0654A' : '#D8D0B8';
+    ctx.lineWidth = 4*dpr;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, -14*dpr);
+    ctx.lineTo(0, 2*dpr);
+    ctx.arc(0, 8*dpr, 8*dpr, -Math.PI/2, Math.PI*0.75, false);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.fillStyle = pointer.active ? '#F0654A' : '#D8D0B8';
+    ctx.arc(0, -14*dpr, 3*dpr, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
   let score = 0, health = 100, running = false, rafId = null;
   let spawnTimer = 0, lastTime = 0, comboCount = 0, comboTimer = 0;
   let bossTimer = 0, bossActive = false, sceneTime = 0;
@@ -176,16 +229,16 @@
     else type = trashTypes[Math.floor(Math.random()*trashTypes.length)];
 
     const x = W()*0.15 + Math.random()*W()*0.7;
-    const vy = -(H()*0.014 + Math.random()*H()*0.0035);
+    const vy = -(H()*0.026 + Math.random()*H()*0.006);
     const vx = (Math.random()-0.5) * W()*0.005;
-    let r = 40*dpr;
-    if(type==='jelly') r = 26*dpr;
-    if(type==='shark') r = 70*dpr;
-    if(type==='heart') r = 32*dpr;
+    let r = 58*dpr;
+    if(type==='jelly') r = 38*dpr;
+    if(type==='shark') r = 100*dpr;
+    if(type==='heart') r = 46*dpr;
 
     items.push({
       x, y: H()+50*dpr, vx, vy: type==='shark' ? vy*0.7 : vy,
-      gravity: H()*0.000020,
+      gravity: H()*0.000034,
       rot: Math.random()*Math.PI*2,
       spin: (Math.random()-0.5)*0.04,
       type, sliced:false, r
@@ -199,20 +252,20 @@
     ctx.rotate(it.rot);
     if(it.type==='bottle'){
       ctx.fillStyle = 'rgba(180,220,230,0.9)';
-      ctx.fillRect(-9*dpr,-24*dpr,18*dpr,42*dpr);
-      ctx.fillRect(-4.5*dpr,-33*dpr,9*dpr,10*dpr);
+      ctx.fillRect(-13*dpr,-34*dpr,26*dpr,60*dpr);
+      ctx.fillRect(-6.5*dpr,-47*dpr,13*dpr,14*dpr);
     } else if(it.type==='can'){
       ctx.fillStyle = '#C0C7CC';
-      ctx.fillRect(-12*dpr,-20*dpr,24*dpr,40*dpr);
+      ctx.fillRect(-17*dpr,-29*dpr,34*dpr,58*dpr);
       ctx.fillStyle = '#E8543A';
-      ctx.fillRect(-12*dpr,-3*dpr,24*dpr,10*dpr);
+      ctx.fillRect(-17*dpr,-4*dpr,34*dpr,14*dpr);
     } else if(it.type==='bag'){
       ctx.fillStyle = 'rgba(255,255,255,0.6)';
       ctx.beginPath();
-      ctx.moveTo(-20*dpr,-18*dpr);
-      ctx.quadraticCurveTo(0,-36*dpr,20*dpr,-18*dpr);
-      ctx.quadraticCurveTo(26*dpr,12*dpr,0,26*dpr);
-      ctx.quadraticCurveTo(-26*dpr,12*dpr,-20*dpr,-18*dpr);
+      ctx.moveTo(-29*dpr,-26*dpr);
+      ctx.quadraticCurveTo(0,-52*dpr,29*dpr,-26*dpr);
+      ctx.quadraticCurveTo(37*dpr,17*dpr,0,38*dpr);
+      ctx.quadraticCurveTo(-37*dpr,17*dpr,-29*dpr,-26*dpr);
       ctx.fill();
     } else if(it.type==='jelly'){
       ctx.fillStyle = 'rgba(240,101,74,0.6)';
@@ -403,6 +456,10 @@
     }
     trail = trail.filter(p=>{ p.age = (p.age||0)+dt; return p.age < 120; });
 
+    updateHook(dt);
+    if(pointer.active) addTrailPoint(hook.x, hook.y);
+    drawHook(dpr);
+
     if(running) rafId = requestAnimationFrame(loop);
   }
 
@@ -419,13 +476,18 @@
     const cy = (e.clientY!==undefined? e.clientY : (e.touches && e.touches[0].clientY));
     return { x:(cx-rect.left)*dpr, y:(cy-rect.top)*dpr };
   }
-  canvas.addEventListener('pointerdown', e=>{ pointerDown=true; const p=getPos(e); addTrailPoint(p.x,p.y); });
-  canvas.addEventListener('pointermove', e=>{ if(!pointerDown||!running) return; const p=getPos(e); addTrailPoint(p.x,p.y); });
-  canvas.addEventListener('pointerup', ()=>{ pointerDown=false; });
-  canvas.addEventListener('pointerleave', ()=>{ pointerDown=false; });
+  canvas.addEventListener('pointerdown', e=>{ pointerDown=true; pointer.active=true; const p=getPos(e); pointer.x=p.x; pointer.y=p.y; });
+  canvas.addEventListener('pointermove', e=>{
+    const p=getPos(e); pointer.x=p.x; pointer.y=p.y;
+  });
+  canvas.addEventListener('pointerup', ()=>{ pointerDown=false; pointer.active=false; });
+  canvas.addEventListener('pointerleave', ()=>{ pointerDown=false; pointer.active=false; });
 
   function startGame(){
     resize(); reset();
+    hook.pivotX = W()/2; hook.angle = 0; hook.angularVel = 0; hook.length = H()*0.3;
+    hook.x = hook.pivotX; hook.y = hook.length;
+    pointer.x = W()/2; pointer.y = H()/2; pointer.active = false;
     startScreen.classList.add('hidden');
     endScreen.classList.add('hidden');
     running = true; lastTime = 0; spawnTimer = 0;
